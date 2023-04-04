@@ -16,10 +16,11 @@ def unpack_numpy_values(dict):
     return {k: v.item() for k, v in dict.items()}
 
 
-def dump_experiment_result(args: Namespace, config: Config, output_dir: str, result: Dict[str, Any]):
+def dump_experiment_result(args: Namespace, config: Config, output_dir: str, result: Dict[str, Any],testmode):
     final_config_dict = asdict(config)
     flattened_experiment = flatten(final_config_dict, reducer="path")
-    result["train_metrics"] = unpack_numpy_values(result["train_metrics"])
+    if not testmode:
+        result["train_metrics"] = unpack_numpy_values(result["train_metrics"])
     result["val_metrics"] = unpack_numpy_values(result["val_metrics"])
     result["num_params"] = result["num_params"].item()
     flattened_result = flatten(result, reducer="path")

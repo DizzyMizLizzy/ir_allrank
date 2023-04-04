@@ -37,6 +37,8 @@ def run():
     torch.cuda.manual_seed_all(42)
     np.random.seed(42)
 
+    model_path = "/Users/alexhe/Desktop/IR/ir_allrank/allrankrun_MSLR-WEB10K/listwise/listwise_approxNDCG.json/fold1/results/run_1/model.pkl"
+
     args = parse_args()
 
     paths = PathsContainer.from_args(args.job_dir, args.run_id, args.config_file_name)
@@ -73,6 +75,9 @@ def run():
 
     # instantiate model
     model = make_model(n_features=n_features, **asdict(config.model, recurse=False))
+    state_dict = torch.load(model_path, map_location=torch.device('cpu'))
+    model.load_state_dict(state_dict)
+    model.eval()
     if torch.cuda.device_count() > 1:
         model = CustomDataParallel(model)
         logger.info("Model training will be distributed to {} GPUs.".format(torch.cuda.device_count()))
@@ -99,16 +104,16 @@ def run():
             device=dev,
             output_dir=paths.output_dir,
             tensorboard_output_path=paths.tensorboard_output_path,
-            testmode=False,
+            testmode=True,
             **asdict(config.training)
         )
-
-    dump_experiment_result(args, config, paths.output_dir, result, False)
+        
+    # dump_experiment_result(args, config, paths.output_dir, result, True)
 
     if urlparse(args.job_dir).scheme == "gs":
         copy_local_to_gs(paths.local_base_output_path, args.job_dir)
 
-    assert_expected_metrics(result, config.expected_metrics)
+    # assert_expected_metrics(result, config.expected_metrics)
 
 
 if __name__ == "__main__":

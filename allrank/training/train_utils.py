@@ -76,7 +76,7 @@ def get_current_lr(optimizer):
 
 
 def fit(epochs, model, loss_func, optimizer, scheduler, train_dl, valid_dl, config,
-        gradient_clipping_norm, early_stopping_patience, device, output_dir, tensorboard_output_path):
+        gradient_clipping_norm, early_stopping_patience, device, output_dir, tensorboard_output_path, testmode):
     tensorboard_summary_writer = TensorboardSummaryWriter(tensorboard_output_path)
 
     num_params = get_num_params(model)
@@ -84,64 +84,103 @@ def fit(epochs, model, loss_func, optimizer, scheduler, train_dl, valid_dl, conf
 
     early_stop = EarlyStop(early_stopping_patience)
 
-    for epoch in range(epochs):
-        logger.info("Current learning rate: {}".format(get_current_lr(optimizer)))
+    if not testmode:
 
-        model.train()
-        # xb dim: [batch_size, slate_length, embedding_dim]
-        # yb dim: [batch_size, slate_length]
+        for epoch in range(epochs):
+            logger.info("Current learning rate: {}".format(get_current_lr(optimizer)))
 
-        train_losses, train_nums = zip(
-            *[loss_batch(model, loss_func, xb.to(device=device), yb.to(device=device), indices.to(device=device),
-                         gradient_clipping_norm, optimizer) for
-              xb, yb, indices in train_dl])
-        train_loss = np.sum(np.multiply(train_losses, train_nums)) / np.sum(train_nums)
-        train_metrics = compute_metrics(config.metrics, model, train_dl, device)
+            if not testmode:
+                model.train()
+                # xb dim: [batch_size, slate_length, embedding_dim]
+                # yb dim: [batch_size, slate_length]
 
+                train_losses, train_nums = zip(
+                    *[loss_batch(model, loss_func, xb.to(device=device), yb.to(device=device), indices.to(device=device),
+                                gradient_clipping_norm, optimizer) for
+                    xb, yb, indices in train_dl])
+                train_loss = np.sum(np.multiply(train_losses, train_nums)) / np.sum(train_nums)
+                train_metrics = compute_metrics(config.metrics, model, train_dl, device)
+            train_loss = 0
+            train_metrics = {0:0}
+            model.eval()
+            with torch.no_grad():
+                val_losses, val_nums = zip(
+                    *[loss_batch(model, loss_func, xb.to(device=device), yb.to(device=device), indices.to(device=device),
+                                gradient_clipping_norm) for
+                    xb, yb, indices in valid_dl])
+                val_metrics = compute_metrics(config.metrics, model, valid_dl, device)
+            val_loss = np.sum(np.multiply(val_losses, val_nums)) / np.sum(val_nums)
+            if not testmode:
+                tensorboard_metrics_dict = {("train", "loss"): train_loss, ("val", "loss"): val_loss}
+            else:
+                tensorboard_metrics_dict = {("train", "loss"): 0, ("val", "loss"): val_loss}
+
+            if not testmode:
+                train_metrics_to_tb = {("train", name): value for name, value in train_metrics.items()}
+                tensorboard_metrics_dict.update(train_metrics_to_tb)
+                tensorboard_metrics_dict.update({("train", "lr"): get_current_lr(optimizer)})
+            val_metrics_to_tb = {("val", name): value for name, value in val_metrics.items()}
+            tensorboard_metrics_dict.update(val_metrics_to_tb)
+            tensorboard_summary_writer.save_to_tensorboard(tensorboard_metrics_dict, epoch)
+            if not testmode:
+                logger.info(epoch_summary(epoch, train_loss, val_loss, train_metrics, val_metrics))
+            else:
+                logger.info(epoch_summary(epoch, 0, val_loss, {0: 0}, val_metrics))
+            with open(os.path.join(output_dir, "experiment_result.txt"), "w") as file:
+                summary = ""
+                for metric_name, metric_value in val_metrics.items():
+                    summary += " Val {metric_name} {metric_value}".format(
+                        metric_name=metric_name, metric_value=metric_value)
+                    file.write(summary)
+
+            current_val_metric_value = val_metrics.get(config.val_metric)
+            if scheduler:
+                if type(scheduler) == torch.optim.lr_scheduler.ReduceLROnPlateau:
+                    args = [val_metrics[config.val_metric]]
+                    scheduler.step(*args)
+                else:
+                    scheduler.step()
+
+            early_stop.step(current_val_metric_value, epoch)
+            if early_stop.stop_training(epoch):
+                logger.info(
+                    "early stopping at epoch {} since {} didn't improve from epoch no {}. Best value {}, current value {}".format(
+                        epoch, config.val_metric, early_stop.best_epoch, early_stop.best_value, current_val_metric_value
+                    ))
+                break
+
+        torch.save(model.state_dict(), os.path.join(output_dir, "model.pkl"))
+        tensorboard_summary_writer.close_all_writers()
+
+        return {
+            "epochs": epoch,
+            "train_metrics": train_metrics,
+            "val_metrics": val_metrics,
+            "num_params": num_params
+        }
+    else:
+        epoch = 0
         model.eval()
         with torch.no_grad():
-            val_losses, val_nums = zip(
-                *[loss_batch(model, loss_func, xb.to(device=device), yb.to(device=device), indices.to(device=device),
-                             gradient_clipping_norm) for
-                  xb, yb, indices in valid_dl])
-            val_metrics = compute_metrics(config.metrics, model, valid_dl, device)
-
-        val_loss = np.sum(np.multiply(val_losses, val_nums)) / np.sum(val_nums)
-
-        tensorboard_metrics_dict = {("train", "loss"): train_loss, ("val", "loss"): val_loss}
-
-        train_metrics_to_tb = {("train", name): value for name, value in train_metrics.items()}
-        tensorboard_metrics_dict.update(train_metrics_to_tb)
-        val_metrics_to_tb = {("val", name): value for name, value in val_metrics.items()}
-        tensorboard_metrics_dict.update(val_metrics_to_tb)
-        tensorboard_metrics_dict.update({("train", "lr"): get_current_lr(optimizer)})
-
-        tensorboard_summary_writer.save_to_tensorboard(tensorboard_metrics_dict, epoch)
-
-        logger.info(epoch_summary(epoch, train_loss, val_loss, train_metrics, val_metrics))
-
-        current_val_metric_value = val_metrics.get(config.val_metric)
-        if scheduler:
-            if type(scheduler) == torch.optim.lr_scheduler.ReduceLROnPlateau:
-                args = [val_metrics[config.val_metric]]
-                scheduler.step(*args)
-            else:
-                scheduler.step()
-
-        early_stop.step(current_val_metric_value, epoch)
-        if early_stop.stop_training(epoch):
-            logger.info(
-                "early stopping at epoch {} since {} didn't improve from epoch no {}. Best value {}, current value {}".format(
-                    epoch, config.val_metric, early_stop.best_epoch, early_stop.best_value, current_val_metric_value
-                ))
-            break
-
-    torch.save(model.state_dict(), os.path.join(output_dir, "model.pkl"))
-    tensorboard_summary_writer.close_all_writers()
-
-    return {
-        "epochs": epoch,
-        "train_metrics": train_metrics,
-        "val_metrics": val_metrics,
-        "num_params": num_params
-    }
+                val_losses, val_nums = zip(
+                    *[loss_batch(model, loss_func, xb.to(device=device), yb.to(device=device), indices.to(device=device),
+                                gradient_clipping_norm) for
+                    xb, yb, indices in valid_dl])
+                val_metrics = compute_metrics(config.metrics, model, valid_dl, device)
+                val_loss = np.sum(np.multiply(val_losses, val_nums)) / np.sum(val_nums)
+        
+        logger.info(epoch_summary(epoch, 0, val_loss, {0: 0}, val_metrics))
+        
+        with open(os.path.join(output_dir, "experiment_result.txt"), "w") as file:
+            summary = ""
+            for metric_name, metric_value in val_metrics.items():
+                summary += " Val {metric_name} {metric_value}".format(
+                    metric_name=metric_name, metric_value=metric_value)
+                file.write(summary)
+        
+        return {
+            "epochs": 0,
+            "train_metrics": {},
+            "val_metrics": val_metrics,
+            "num_params": num_params
+        }
