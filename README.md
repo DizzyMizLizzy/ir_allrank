@@ -12,5 +12,5 @@
 
 ### To test:
 
-`python3 test.py --config-file-name scripts/test.json --run-id test_run --job-dir /test/run/  `
+`python3 test.py --config-file-name scripts/test.json --run-id test_run --job-dir /test/run/  --model $OUR_MODEL_PATH  `
 

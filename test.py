@@ -28,6 +28,8 @@ def parse_args() -> Namespace:
                         required=True)
     parser.add_argument("--config-file-name", required=True, type=str, help="Name of json file with config")
 
+    parser.add_argument("--model", required=True, type=str)
+
     return parser.parse_args()
 
 
@@ -37,9 +39,10 @@ def run():
     torch.cuda.manual_seed_all(42)
     np.random.seed(42)
 
-    model_path = "/Users/alexhe/Desktop/IR/ir_allrank/allrankrun_MSLR-WEB10K/listwise/listwise_approxNDCG.json/fold1/results/run_1/model.pkl"
 
     args = parse_args()
+
+    model_path = args.model
 
     paths = PathsContainer.from_args(args.job_dir, args.run_id, args.config_file_name)
 
