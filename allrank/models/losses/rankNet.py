@@ -4,6 +4,7 @@ import torch
 from torch.nn import BCEWithLogitsLoss
 
 from allrank.data.dataset_loading import PADDED_Y_VALUE
+from allrank.models.losses.approxNDCG import approxNDCGLoss
 
 
 def rankNet_weightByGTDiff(y_pred, y_true, padded_value_indicator=PADDED_Y_VALUE):
@@ -76,4 +77,4 @@ def rankNet(y_pred, y_true, padded_value_indicator=PADDED_Y_VALUE, weight_by_dif
     true_diffs = (true_diffs > 0).type(torch.float32)
     true_diffs = true_diffs[the_mask]
 
-    return BCEWithLogitsLoss(weight=weight)(pred_diffs, true_diffs)
+    return BCEWithLogitsLoss(weight=weight)(pred_diffs, true_diffs) * 0.5 + approxNDCGLoss(y_pred, y_true) * 0.5

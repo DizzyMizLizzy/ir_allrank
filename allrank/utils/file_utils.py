@@ -23,7 +23,7 @@ class PathsContainer:
 
     @classmethod
     def from_args(cls, output, run_id, config_path, package_name="allrank"):
-        base_output_path = "/Users/alexhe/Desktop/IR/test/allRank"
+        base_output_path = "D:\\Programming\\Assignments\\IR\\project\\run\\ir_allrank\\allrank"
         base_output_path += get_path_from_local_uri(output)
         if is_gs_path(base_output_path):
             local_base_output_path = tempfile.mkdtemp()
