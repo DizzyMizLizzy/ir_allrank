@@ -10,7 +10,7 @@ for folder in folders:
         for config in configs:
             config_path = f'configs\\{folder}\\fold{fold}\\{config}'
             run_id = 'test_1'
-            job_dir = f'test_WEB10K\{folder}\\{config}\\fold{fold}'
+            job_dir = f'test_WeightedRanknet\{folder}\\{config}\\fold{fold}'
             model_dir = f'D:\\Programming\\Assignments\\IR\\project\\run\\ir_allrank\\allrankrun_MSLR-WEB10K\\{folder}\\{config}\\fold{fold}\\results\\run_1\\model.pkl'
 
             if os.path.exists(config_path):
