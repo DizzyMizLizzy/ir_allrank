@@ -11,4 +11,4 @@
 
 `python3 test.py --config-file-name $YOUR_CONFIG_PATH --run-id test_run --job-dir /test/run/  --model $YOUR_MODEL_PATH  `
 
-Make sure to check your 
+Make sure to always check the path of your config file and dataset!!!
